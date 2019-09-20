@@ -1,30 +1,35 @@
-#IMPORTS:
+#------------------------------------------------------------
+# Imports
+#------------------------------------------------------------
 import sys
 import pyaudio
 import time
 import random
 import os
 import wave
-#import threa
-from pyAudioAnalysis3 import audioTrainTest as aT
 import threading
 import time
 from pydub import AudioSegment
 import numpy
 import queue
-#from multiprocessing import Queue
 from os import listdir
 from os.path import isfile, join
+from pyAudioAnalysis3 import audioTrainTest as aT
 
-#Thread Control
+#------------------------------------------------------------
+# Thread Control
+#------------------------------------------------------------
 lo = threading.Lock()
 onlyfiles = []
 
-#Thread Class to play Audio segment
+#------------------------------------------------------------
+# Class to play audio segment
+#------------------------------------------------------------
 class playThread (threading.Thread):
     def __init__(self, file):
         threading.Thread.__init__(self)
         self.file = file
+
     def run(self):
         CHUNK = 1024
 
@@ -49,9 +54,9 @@ class playThread (threading.Thread):
         p.terminate()
 
 
-
-
-#Thread Class to queue record stream
+#------------------------------------------------------------
+# Class to Queue record stream 
+#------------------------------------------------------------
 class recordQThread (threading.Thread):
     def __init__(self, frames = []):
         threading.Thread.__init__(self)
@@ -73,7 +78,9 @@ class recordQThread (threading.Thread):
             lo.release()
 
 
-#Thread Class to record Audio Segment
+#------------------------------------------------------------
+# Class to record audio segment
+#------------------------------------------------------------
 class recordThread (threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -120,29 +127,18 @@ def find(x):
 
         # if (Sens != "NOISE"):
         #     print(Sens)
-    time.sleep(1)
+    # time.sleep(1) 
     print(x)
 
-#Thread Class to Analyse Audio Segment
+#------------------------------------------------------------
+# Class to analyze audio segment
+#------------------------------------------------------------
 class analyseThread (threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
 
     def run(self):
         global q
-
-        # while True:
-            
-        #     lo.acquire()
-            
-        #     if not q.empty():
-        #         f = q.get()
-        #         x = aT.fileClassification(f,"svmTaps","svm")
-        #         print(x)
-            
-        #     lo.release()
-            
-        # flagStart = False
 
         while True:
             lo.acquire()
@@ -161,45 +157,31 @@ class analyseThread (threading.Thread):
 
                     find(x)
             
-                    
-                        # if (Sens != "Noise"):
-                        #     print(Sens)
-
-                   
-
                         
             lo.release()
 
+#------------------------------------------------------------
+# Driver functions
+#------------------------------------------------------------
 
-
-
-
-
-##############
-##############       
-#MAIN FUNCTION:
-
-def mainTap(ch):
-
-    onlyfiles = [f for f in listdir('.') if not isfile(join('.', f))]
-    #onlyfiles.remove("drums")
-    onlyfiles.remove("pyAudioAnalysis3")
-    onlyfiles.remove("__pycache__")
-    #onlyfiles.remove("images")
+def train():
+    audio_data_location = ["audio_data/" + f for f in listdir('audio_data')]
+    print(audio_data_location)
+    aT.featureAndTrain(audio_data_location, 1.0, 1.0, aT.shortTermWindow, aT.shortTermStep, "svm", "models/svmModel", False)
+    
+def start(option):
+    
     startMode = False
     
     global q 
     q = queue.Queue(0)
-     
-    #ch = A (start Thread for drums) | B (Record new Data) | C (Start Thread for LaunchPad)   
-    if(str(ch)=='A'):
-        print("**************************")
-        print(onlyfiles)
-        print("***************************")
-        aT.featureAndTrain(onlyfiles, 1.0, 1.0, aT.shortTermWindow, aT.shortTermStep, "svm", "svmTaps", False)
+         
+    if(option == 1):
+        audio_data_location = [f for f in listdir('models') if not isfile(join('models', f))]
+        print(audio_data_location)
+        aT.featureAndTrain(audio_data_location, 1.0, 1.0, aT.shortTermWindow, aT.shortTermStep, "svm", "svmSMTemp", False)
         
-    elif(str(ch)=='B'):
-        ch = 'x'
+    elif(option == 2):
         surfaceName = input("Surface Name: ")
         while(surfaceName != 'x'):
             numberOfInputs = input("Number of Data Points: ")
@@ -208,16 +190,9 @@ def mainTap(ch):
                 addSurfacePoint(surfaceName)
             surfaceName = input("Surface Name: ")
 
-    elif(str(ch)=='C'):
-        startMode = True
-        print("Started\n\n")
-    
-
-    if (startMode):
+    elif(option == 3):
         recordThread().start()
         analyseThread().start()
-        #analyseThread().start( )
-
 
 
 def addSurfacePoint(surfacePointName):
@@ -271,3 +246,5 @@ def recordSurfacePoint(surfacePointName):
         os.mkdir(str(surfacePointName))
 
     os.rename(WAVE_OUTPUT_FILENAME, surfacePointName + "/" + WAVE_OUTPUT_FILENAME)
+
+train()

@@ -36,7 +36,7 @@ class recordSurfacePoint (threading.Thread):
         keyPressedFlag = False
         CHUNK = 1024
         FORMAT = pyaudio.paInt16
-        CHANNELS = 2
+        CHANNELS = 1
         RATE = 44100
         RECORD_SECONDS = 1
 
@@ -102,3 +102,4 @@ def recordKey():
     lis = keyboard.Listener(on_press=on_press)
     lis.start() # start to listen on a separate thread
     lis.join() # no this if main thread is polling self.keys
+
