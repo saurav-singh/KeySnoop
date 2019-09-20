@@ -73,7 +73,6 @@ class recordQThread (threading.Thread):
             lo.release()
 
 
-
 #Thread Class to record Audio Segment
 class recordThread (threading.Thread):
     def __init__(self):
@@ -101,31 +100,28 @@ class recordThread (threading.Thread):
         frames = []
         for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
             data = stream.read(CHUNK)  
-            frames.append(data)
-        
+            frames.append(data) 
    
-        recordQThread(frames).start()
+        #recordQThread(frames).start()
 
         while True:
-                #print "Frames: " + str(len(frames))
                 frames.remove(frames[0])
                 data = stream.read(CHUNK)  
                 frames.append(data)
-                
                 recordQThread(frames).start()
-                
-                '''audiofile = AudioSegment(data=b''.join(frames),sample_width=2,frame_rate=RATE,channels=2)
-                data = numpy.fromstring(audiofile._data, numpy.int16)
-                x = []
-                for chn in xrange(audiofile.channels):
-                    x.append(data[chn::audiofile.channels])
-                x = numpy.array(x).T
-                
-                lo.acquire()
-                q.put(x)
-                lo.release()'''
 
-        print ("Exiting " + self.name)
+def find(x):
+    l = x[1].tolist()
+    
+    maX = max(l)
+    if (maX > 0.65 and maX < 0.99):
+        match_index = l.index(max(l))
+        Sens = x[2][match_index]
+
+        # if (Sens != "NOISE"):
+        #     print(Sens)
+    time.sleep(1)
+    print(x)
 
 #Thread Class to Analyse Audio Segment
 class analyseThread (threading.Thread):
@@ -134,8 +130,19 @@ class analyseThread (threading.Thread):
 
     def run(self):
         global q
-        flagStart = False
-        
+
+        # while True:
+            
+        #     lo.acquire()
+            
+        #     if not q.empty():
+        #         f = q.get()
+        #         x = aT.fileClassification(f,"svmTaps","svm")
+        #         print(x)
+            
+        #     lo.release()
+            
+        # flagStart = False
 
         while True:
             lo.acquire()
@@ -143,25 +150,24 @@ class analyseThread (threading.Thread):
             while not q.empty():
                 f = q.get()
                 x = aT.fileClassification(f, "svmTaps", "svm")
+                
                 q.task_done()
                 flagStart = True
                 if flagStart:
                     flagStart = False 
-                    
                     onlyObj = [f for f in listdir('.') if not isfile(join('.', f))]
-                    onlyObj.remove("drums")
-                    onlyObj.remove("pyAudioAnalysis")
-                    onlyObj.remove("images")
-                    counter = len(onlyObj)
+                    onlyObj.remove("pyAudioAnalysis3")
+                    counter = 2
+
+                    find(x)
+            
                     
-                    for i in range (0, counter):
-                        if(float(x[1][i]) > 0.55) and (float(x[1][i]) < 0.99):
-                            Sens = x[2][i]
-                        else:
-                            Sens = "NOISE"
-                        if( Sens != "NOISE"):
-                            print (Sens)
-                            #print x[1][i]
+                        # if (Sens != "Noise"):
+                        #     print(Sens)
+
+                   
+
+                        
             lo.release()
 
 
@@ -183,7 +189,7 @@ def mainTap(ch):
     startMode = False
     
     global q 
-    q = queue.Queue()
+    q = queue.Queue(0)
      
     #ch = A (start Thread for drums) | B (Record new Data) | C (Start Thread for LaunchPad)   
     if(str(ch)=='A'):
@@ -204,16 +210,15 @@ def mainTap(ch):
 
     elif(str(ch)=='C'):
         startMode = True
+        print("Started\n\n")
     
 
     if (startMode):
-        #recordThread().start()
+        recordThread().start()
         analyseThread().start()
-        #analyseThread().start()
+        #analyseThread().start( )
 
-         
 
-    
 
 def addSurfacePoint(surfacePointName):
     print ("Starting Record")

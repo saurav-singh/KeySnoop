@@ -38,7 +38,7 @@ class recordSurfacePoint (threading.Thread):
         FORMAT = pyaudio.paInt16
         CHANNELS = 2
         RATE = 44100
-        RECORD_SECONDS = 0.2
+        RECORD_SECONDS = 1
 
 
         while(True):
