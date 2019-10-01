@@ -12,6 +12,7 @@ import time
 from pydub import AudioSegment
 import numpy
 import queue
+from pynput import keyboard
 from os import listdir
 from os.path import isfile, join
 from pyAudioAnalysis3 import audioTrainTest as aT
@@ -66,7 +67,9 @@ class recordQThread (threading.Thread):
             global q
             RATE = 44100           
             audiofile = AudioSegment(data=b''.join(self.frames),sample_width=2,frame_rate=RATE,channels=2)
-            data = numpy.fromstring(audiofile._data, numpy.int16)
+            # data = numpy.fromstring(audiofile._data, numpy.int16)
+            data = numpy.frombuffer(audiofile._data, numpy.int16)
+
             x = []
             for chn in range(audiofile.channels):
                 x.append(data[chn::audiofile.channels])
@@ -103,7 +106,6 @@ class recordThread (threading.Thread):
                         output=True,
                         frames_per_buffer=CHUNK)
 
-           # print("* HIT!")
         frames = []
         for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
             data = stream.read(CHUNK)  
@@ -119,16 +121,14 @@ class recordThread (threading.Thread):
 
 def find(x):
     l = x[1].tolist()
-    
     maX = max(l)
     if (maX > 0.65 and maX < 0.99):
         match_index = l.index(max(l))
         Sens = x[2][match_index]
 
-        # if (Sens != "NOISE"):
-        #     print(Sens)
-    # time.sleep(1) 
-    print(x)
+        if (Sens != "NOISE"):
+            print(Sens)
+    
 
 #------------------------------------------------------------
 # Class to analyze audio segment
@@ -145,7 +145,7 @@ class analyseThread (threading.Thread):
 
             while not q.empty():
                 f = q.get()
-                x = aT.fileClassification(f, "svmTaps", "svm")
+                x = aT.fileClassification(f, "models/svmModel", "svm")
                 
                 q.task_done()
                 flagStart = True
@@ -160,41 +160,10 @@ class analyseThread (threading.Thread):
                         
             lo.release()
 
+
 #------------------------------------------------------------
-# Driver functions
+# Class to record Audio Surface
 #------------------------------------------------------------
-
-def train():
-    audio_data_location = ["audio_data/" + f for f in listdir('audio_data')]
-    print(audio_data_location)
-    aT.featureAndTrain(audio_data_location, 1.0, 1.0, aT.shortTermWindow, aT.shortTermStep, "svm", "models/svmModel", False)
-    
-def start(option):
-    
-    startMode = False
-    
-    global q 
-    q = queue.Queue(0)
-         
-    if(option == 1):
-        audio_data_location = [f for f in listdir('models') if not isfile(join('models', f))]
-        print(audio_data_location)
-        aT.featureAndTrain(audio_data_location, 1.0, 1.0, aT.shortTermWindow, aT.shortTermStep, "svm", "svmSMTemp", False)
-        
-    elif(option == 2):
-        surfaceName = input("Surface Name: ")
-        while(surfaceName != 'x'):
-            numberOfInputs = input("Number of Data Points: ")
-            for i in range(0,int(numberOfInputs)):
-                print ("Input " + str(i+1))
-                addSurfacePoint(surfaceName)
-            surfaceName = input("Surface Name: ")
-
-    elif(option == 3):
-        recordThread().start()
-        analyseThread().start()
-
-
 def addSurfacePoint(surfacePointName):
     print ("Starting Record")
     recordSurfacePoint(surfacePointName)
@@ -208,7 +177,7 @@ def recordSurfacePoint(surfacePointName):
     randomFileName = str((random.random() * 100) * (random.random() * 100))
     WAVE_OUTPUT_FILENAME = randomFileName + ".wav"
 
-    p = pyaudio.PyAudio()
+    p = pyaudio.PyAudio()   
 
     stream = p.open(format=FORMAT,
                     channels=CHANNELS,
@@ -247,4 +216,111 @@ def recordSurfacePoint(surfacePointName):
 
     os.rename(WAVE_OUTPUT_FILENAME, surfacePointName + "/" + WAVE_OUTPUT_FILENAME)
 
-train()
+#------------------------------------------------------------
+# Class to record key stroke audio segments
+#------------------------------------------------------------
+def on_press(key):
+    global keyPressedFlag        
+    global keyPressed
+    try: k = key.char #single-char keys
+    except: k = key.name # other keys
+    if key == keyboard.Key.esc: return False # stop listener
+    #if k in ['1', '2', 'left', 'right']: # keys interested
+        # self.keys.append(k) # store it in global-like variable
+    print('Key pressed: ' + k)
+    keyPressed = k
+    keyPressedFlag = True
+
+    #return False # remove this if want more keys
+class recordSurfacePoint (threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+    def run(self):
+        global keyPressedFlag        
+        global keyPressed
+        keyPressedFlag = False
+        CHUNK = 1024
+        FORMAT = pyaudio.paInt16
+        CHANNELS = 1
+        RATE = 44100
+        RECORD_SECONDS = 1
+
+
+        while(True):
+            p = pyaudio.PyAudio()
+
+            stream = p.open(format=FORMAT,
+                            channels=CHANNELS,
+                            rate=RATE,
+                            input=True,
+                            output=True,
+                            frames_per_buffer=CHUNK)
+
+            
+            print("* Recording in ")
+            frames = []
+
+            i = 0  
+            while(True):
+                i += 1
+                data = stream.read(CHUNK)
+                frames.append(data)
+                if ((i >int((RATE / CHUNK * RECORD_SECONDS)*0.3)) and (keyPressedFlag == False)):
+                    frames.remove(frames[0])
+                elif(keyPressedFlag == True):
+                    for j in range(0, int((RATE / CHUNK * RECORD_SECONDS)*0.7)):
+                        data = stream.read(CHUNK)
+                        frames.append(data)
+                    keyPressedFlag = False
+                    break
+            
+            print("* done recording")
+
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+
+            randomFileName = str((random.random() * 100) * (random.random() * 100))
+            WAVE_OUTPUT_FILENAME = randomFileName + ".wav"
+
+            wf = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(p.get_sample_size(FORMAT))
+            wf.setframerate(RATE)
+            wf.writeframes(b''.join(frames))
+            wf.close()
+           
+            surfacePointName = keyPressed
+            
+            if not os.path.exists (surfacePointName):
+                os.mkdir(str(surfacePointName))
+
+            os.rename(WAVE_OUTPUT_FILENAME, surfacePointName + "/" +  WAVE_OUTPUT_FILENAME)
+
+#------------------------------------------------------------
+# Driver functions
+#------------------------------------------------------------
+
+def train():
+    audio_data_location = ["audio_data/" + f for f in listdir('audio_data')]
+    aT.featureAndTrain(audio_data_location, 1.0, 1.0, aT.shortTermWindow, aT.shortTermStep, "svm", "models/svmModel", False)
+
+def start():
+    global q
+    q = queue.Queue()
+    recordThread().start()
+    analyseThread().start()
+
+def recordKey():
+    recordSurfacePoint().start()
+    lis = keyboard.Listener(on_press=on_press)
+    lis.start() # start to listen on a separate thread
+    lis.join() # no this if main thread is polling self.keys
+
+def recordSurface():
+    surfaceName = input("Surface Name: ")
+    numberOfInputs = input("Number of Data Points: ")
+    for i in range(0,int(numberOfInputs)):
+        print ("Input " + str(i+1))
+        addSurfacePoint(surfaceName)
+      
